@@ -26,8 +26,11 @@
 #include <pcl/filters/voxel_grid.h>
 #include <pcl/kdtree/kdtree_flann.h>
 
+#include <dynamic_reconfigure/server.h>
+#include <local_planner/PathFollowerConfig.h>
 using namespace std;
 
+int stopCounter = 0;
 const double PI = 3.1415926;
 
 double sensorOffsetX = 0;
@@ -93,6 +96,36 @@ double switchTime = 0;
 
 nav_msgs::Path path;
 
+void reconfigureCallback(local_planner::PathFollowerConfig &config, uint32_t level) {
+    sensorOffsetX = config.sensorOffsetX;
+    sensorOffsetY = config.sensorOffsetY;
+    pubSkipNum = config.pubSkipNum;
+    twoWayDrive = config.twoWayDrive;
+    lookAheadDis = config.lookAheadDis;
+    yawRateGain = config.yawRateGain;
+    stopYawRateGain = config.stopYawRateGain;
+    maxYawRate = config.maxYawRate;
+    maxSpeed = config.maxSpeed;
+    maxAccel = config.maxAccel;
+    switchTimeThre = config.switchTimeThre;
+    dirDiffThre = config.dirDiffThre;
+    stopDisThre = config.stopDisThre;
+    slowDwnDisThre = config.slowDwnDisThre;
+    useInclRateToSlow = config.useInclRateToSlow;
+    inclRateThre = config.inclRateThre;
+    slowRate1 = config.slowRate1;
+    slowRate2 = config.slowRate2;
+    slowTime1 = config.slowTime1;
+    slowTime2 = config.slowTime2;
+    useInclToStop = config.useInclToStop;
+    inclThre = config.inclThre;
+    stopTime = config.stopTime;
+    noRotAtStop = config.noRotAtStop;
+    noRotAtGoal = config.noRotAtGoal;
+    autonomyMode = config.autonomyMode;
+    autonomySpeed = config.autonomySpeed;
+    joyToSpeedDelay = config.joyToSpeedDelay;
+}
 void odomHandler(const nav_msgs::Odometry::ConstPtr& odomIn)
 {
   odomTime = odomIn->header.stamp.toSec();
@@ -234,6 +267,11 @@ int main(int argc, char** argv)
     else if (joySpeed > 1.0) joySpeed = 1.0;
   }
 
+  dynamic_reconfigure::Server<local_planner::PathFollowerConfig> server;
+  dynamic_reconfigure::Server<local_planner::PathFollowerConfig>::CallbackType f;
+
+  f = boost::bind(&reconfigureCallback, _1, _2);
+  server.setCallback(f);
   ros::Rate rate(100);
   bool status = ros::ok();
   while (status) {
@@ -335,8 +373,16 @@ int main(int argc, char** argv)
         if (fabs(vehicleSpeed) <= maxAccel / 100.0) cmd_vel.twist.linear.x = 0;
         else cmd_vel.twist.linear.x = vehicleSpeed;
         cmd_vel.twist.angular.z = vehicleYawRate;
-        pubSpeed.publish(cmd_vel);
-
+	if (cmd_vel.twist.linear.x or cmd_vel.twist.angular.z){
+		stopCounter = 0;
+        	pubSpeed.publish(cmd_vel);
+	}else{
+		if(stopCounter<50){
+			stopCounter += 1;
+        		pubSpeed.publish(cmd_vel);
+		}
+	}
+	
         pubSkipCount = pubSkipNum;
       }
     }

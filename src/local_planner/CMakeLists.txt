@@ -12,6 +12,12 @@ find_package(catkin REQUIRED COMPONENTS
   std_msgs
   sensor_msgs
   pcl_ros
+  dynamic_reconfigure
+)
+
+generate_dynamic_reconfigure_options(
+	cfg/LocalPlanner.cfg
+	cfg/PathFollower.cfg
 )
 
 find_package(PCL REQUIRED)
@@ -50,13 +56,15 @@ link_directories(
 
 ## Declare executables
 add_executable(localPlanner src/localPlanner.cpp)
+add_executable(myLocalPlanner src/myLocalPlanner.cpp)
 add_executable(pathFollower src/pathFollower.cpp)
 
 ## Specify libraries to link a library or executable target against
 target_link_libraries(localPlanner ${catkin_LIBRARIES} ${PCL_LIBRARIES})
+target_link_libraries(myLocalPlanner ${catkin_LIBRARIES} ${PCL_LIBRARIES})
 target_link_libraries(pathFollower ${catkin_LIBRARIES} ${PCL_LIBRARIES})
 
-install(TARGETS localPlanner pathFollower
+install(TARGETS localPlanner myLocalPlanner pathFollower
   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
@@ -68,3 +76,7 @@ install(DIRECTORY launch/
 install(DIRECTORY paths/
   DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/paths
 )
+
+#dynamic reconfigure
+add_dependencies(localPlanner local_planner_gencfg)
+add_dependencies(pathFollower local_planner_gencfg)

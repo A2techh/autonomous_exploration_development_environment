@@ -11,7 +11,7 @@
   <arg name="goalX" default="0"/>
   <arg name="goalY" default="0"/>
 
-  <node pkg="local_planner" type="localPlanner" name="localPlanner" output="screen" required="true">
+  <node pkg="local_planner" type="myLocalPlanner" name="localPlanner" output="screen" required="true">
     <param name="pathFolder" type="string" value="$(find local_planner)/paths" />
     <param name="vehicleLength" type="double" value="0.6" />
     <param name="vehicleWidth" type="double" value="0.6" />

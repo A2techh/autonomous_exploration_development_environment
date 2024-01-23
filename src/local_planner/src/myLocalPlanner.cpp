@@ -9,6 +9,7 @@
 #include <message_filters/sync_policies/approximate_time.h>
 
 #include <std_msgs/Bool.h>
+#include <std_msgs/Empty.h>
 #include <std_msgs/Float32.h>
 #include <nav_msgs/Path.h>
 #include <nav_msgs/Odometry.h>
@@ -46,6 +47,7 @@ double laserVoxelSize = 0.05;
 double terrainVoxelSize = 0.2;
 bool useTerrainAnalysis = false;
 bool checkObstacle = true;
+bool startWaypoints = false;
 bool checkRotObstacle = false;
 double adjacentRange = 3.5;
 double obstacleHeightThre = 0.2;
@@ -75,8 +77,8 @@ double autonomySpeed = 1.0;
 double joyToSpeedDelay = 2.0;
 double joyToCheckObstacleDelay = 5.0;
 double goalClearRange = 0.5;
-double goalX = 0;
-double goalY = 0;
+double goalX = 999.99;
+double goalY = 999.99;
 
 float joySpeed = 0;
 float joySpeedRaw = 0;
@@ -95,14 +97,12 @@ const int gridVoxelNum = gridVoxelNumX * gridVoxelNumY;
 pcl::PointCloud<pcl::PointXYZI>::Ptr laserCloud(new pcl::PointCloud<pcl::PointXYZI>());
 pcl::PointCloud<pcl::PointXYZI>::Ptr laserCloudCrop(new pcl::PointCloud<pcl::PointXYZI>());
 pcl::PointCloud<pcl::PointXYZI>::Ptr laserCloudDwz(new pcl::PointCloud<pcl::PointXYZI>());
-pcl::PointCloud<pcl::PointXYZI>::Ptr terrainCloud(new pcl::PointCloud<pcl::PointXYZI>());
-pcl::PointCloud<pcl::PointXYZI>::Ptr terrainCloudCrop(new pcl::PointCloud<pcl::PointXYZI>());
-pcl::PointCloud<pcl::PointXYZI>::Ptr terrainCloudDwz(new pcl::PointCloud<pcl::PointXYZI>());
+
 pcl::PointCloud<pcl::PointXYZI>::Ptr laserCloudStack[laserCloudStackNum];
 pcl::PointCloud<pcl::PointXYZI>::Ptr plannerCloud(new pcl::PointCloud<pcl::PointXYZI>());
 pcl::PointCloud<pcl::PointXYZI>::Ptr plannerCloudCrop(new pcl::PointCloud<pcl::PointXYZI>());
 pcl::PointCloud<pcl::PointXYZI>::Ptr boundaryCloud(new pcl::PointCloud<pcl::PointXYZI>());
-pcl::PointCloud<pcl::PointXYZI>::Ptr addedObstacles(new pcl::PointCloud<pcl::PointXYZI>());
+
 pcl::PointCloud<pcl::PointXYZ>::Ptr startPaths[groupNum];
 #if PLOTPATHSET == 1
 pcl::PointCloud<pcl::PointXYZI>::Ptr paths[pathNum];
@@ -117,7 +117,6 @@ float clearPathPerGroupScore[36 * groupNum] = {0};
 std::vector<int> correspondences[gridVoxelNum];
 
 bool newLaserCloud = false;
-bool newTerrainCloud = false;
 
 double odomTime = 0;
 double joyTime = 0;
@@ -125,7 +124,7 @@ double joyTime = 0;
 float vehicleRoll = 0, vehiclePitch = 0, vehicleYaw = 0;
 float vehicleX = 0, vehicleY = 0, vehicleZ = 0;
 
-pcl::VoxelGrid<pcl::PointXYZI> laserDwzFilter, terrainDwzFilter;
+pcl::VoxelGrid<pcl::PointXYZI> laserDwzFilter;
 
 void reconfigureCallback(local_planner::LocalPlannerConfig &config, uint32_t level) {
     // Update your variables with the new values
@@ -216,39 +215,6 @@ void laserCloudHandler(const sensor_msgs::PointCloud2ConstPtr& laserCloud2)
   }
 }
 
-void terrainCloudHandler(const sensor_msgs::PointCloud2ConstPtr& terrainCloud2)
-{
-  if (useTerrainAnalysis) {
-    terrainCloud->clear();
-    pcl::fromROSMsg(*terrainCloud2, *terrainCloud);
-
-    pcl::PointXYZI point;
-    terrainCloudCrop->clear();
-    int terrainCloudSize = terrainCloud->points.size();
-    for (int i = 0; i < terrainCloudSize; i++) {
-      point = terrainCloud->points[i];
-
-      float pointX = point.x;
-      float pointY = point.y;
-      float pointZ = point.z;
-
-      float dis = sqrt((pointX - vehicleX) * (pointX - vehicleX) + (pointY - vehicleY) * (pointY - vehicleY));
-      if (dis < adjacentRange && (point.intensity > obstacleHeightThre || useCost)) {
-        point.x = pointX;
-        point.y = pointY;
-        point.z = pointZ;
-        terrainCloudCrop->push_back(point);
-      }
-    }
-
-    terrainCloudDwz->clear();
-    terrainDwzFilter.setInputCloud(terrainCloudCrop);
-    terrainDwzFilter.filter(*terrainCloudDwz);
-
-    newTerrainCloud = true;
-  }
-}
-
 void joystickHandler(const sensor_msgs::Joy::ConstPtr& joy)
 {
   joyTime = ros::Time::now().toSec();
@@ -335,16 +301,6 @@ void boundaryHandler(const geometry_msgs::PolygonStamped::ConstPtr& boundary)
   }
 }
 
-void addedObstaclesHandler(const sensor_msgs::PointCloud2ConstPtr& addedObstacles2)
-{
-  addedObstacles->clear();
-  pcl::fromROSMsg(*addedObstacles2, *addedObstacles);
-
-  int addedObstaclesSize = addedObstacles->points.size();
-  for (int i = 0; i < addedObstaclesSize; i++) {
-    addedObstacles->points[i].intensity = 200.0;
-  }
-}
 
 void checkObstacleHandler(const std_msgs::Bool::ConstPtr& checkObs)
 {
@@ -353,6 +309,11 @@ void checkObstacleHandler(const std_msgs::Bool::ConstPtr& checkObs)
   if (autonomyMode && checkObsTime - joyTime > joyToCheckObstacleDelay) {
     checkObstacle = checkObs->data;
   }
+}
+
+void checkStartWaypointsHandler(const std_msgs::Empty::ConstPtr& checkStartWaypoints)
+{
+  startWaypoints = !startWaypoints;
 }
 
 int readPlyHeader(FILE *filePtr)
@@ -576,17 +537,14 @@ int main(int argc, char** argv)
   nhPrivate.getParam("joyToSpeedDelay", joyToSpeedDelay);
   nhPrivate.getParam("joyToCheckObstacleDelay", joyToCheckObstacleDelay);
   nhPrivate.getParam("goalClearRange", goalClearRange);
-  nhPrivate.getParam("goalX", goalX);
-  nhPrivate.getParam("goalY", goalY);
+  // nhPrivate.getParam("goalX", goalX);
+  // nhPrivate.getParam("goalY", goalY);
 
   ros::Subscriber subOdometry = nh.subscribe<nav_msgs::Odometry>
                                 ("/state_estimation", 5, odometryHandler);
 
   ros::Subscriber subLaserCloud = nh.subscribe<sensor_msgs::PointCloud2>
                                   ("/registered_scan", 5, laserCloudHandler);
-
-  ros::Subscriber subTerrainCloud = nh.subscribe<sensor_msgs::PointCloud2>
-                                    ("/terrain_map", 5, terrainCloudHandler);
 
   ros::Subscriber subJoystick = nh.subscribe<sensor_msgs::Joy> ("/joy", 5, joystickHandler);
 
@@ -596,9 +554,9 @@ int main(int argc, char** argv)
 
   ros::Subscriber subBoundary = nh.subscribe<geometry_msgs::PolygonStamped> ("/navigation_boundary", 5, boundaryHandler);
 
-  ros::Subscriber subAddedObstacles = nh.subscribe<sensor_msgs::PointCloud2> ("/added_obstacles", 5, addedObstaclesHandler);
-
   ros::Subscriber subCheckObstacle = nh.subscribe<std_msgs::Bool> ("/check_obstacle", 5, checkObstacleHandler);
+  
+  ros::Subscriber subCheckStartWaypoints = nh.subscribe<std_msgs::Empty> ("/start_waypoints", 5, checkStartWaypointsHandler);
 
   ros::Publisher pubPath = nh.advertise<nav_msgs::Path> ("/path", 5);
   nav_msgs::Path path;
@@ -634,7 +592,6 @@ int main(int argc, char** argv)
   }
 
   laserDwzFilter.setLeafSize(laserVoxelSize, laserVoxelSize, laserVoxelSize);
-  terrainDwzFilter.setLeafSize(terrainVoxelSize, terrainVoxelSize, terrainVoxelSize);
 
   readStartPaths();
   #if PLOTPATHSET == 1
@@ -656,7 +613,7 @@ int main(int argc, char** argv)
   while (status) {
     ros::spinOnce();
 
-    if (newLaserCloud || newTerrainCloud) {
+    if (newLaserCloud) {
       if (newLaserCloud) {
         newLaserCloud = false;
 
@@ -668,13 +625,6 @@ int main(int argc, char** argv)
         for (int i = 0; i < laserCloudStackNum; i++) {
           *plannerCloud += *laserCloudStack[i];
         }
-      }
-
-      if (newTerrainCloud) {
-        newTerrainCloud = false;
-
-        plannerCloud->clear();
-        *plannerCloud = *terrainCloudDwz;
       }
 
       float sinVehicleRoll = sin(vehicleRoll);
@@ -718,31 +668,30 @@ int main(int argc, char** argv)
         }
       }
 
-      int addedObstaclesSize = addedObstacles->points.size();
-      for (int i = 0; i < addedObstaclesSize; i++) {
-        point.x = ((addedObstacles->points[i].x - vehicleX) * cosVehicleYaw 
-                + (addedObstacles->points[i].y - vehicleY) * sinVehicleYaw);
-        point.y = (-(addedObstacles->points[i].x - vehicleX) * sinVehicleYaw 
-                + (addedObstacles->points[i].y - vehicleY) * cosVehicleYaw);
-        point.z = addedObstacles->points[i].z;
-        point.intensity = addedObstacles->points[i].intensity;
-
-        float dis = sqrt(point.x * point.x + point.y * point.y);
-        if (dis < adjacentRange) {
-          plannerCloudCrop->push_back(point);
-        }
-      }
-
       float pathRange = adjacentRange;
       if (pathRangeBySpeed) pathRange = adjacentRange * joySpeed;
       if (pathRange < minPathRange) pathRange = minPathRange;
       float relativeGoalDis = adjacentRange;
 
       if (autonomyMode) {
-        float relativeGoalX = ((goalX - vehicleX) * cosVehicleYaw + (goalY - vehicleY) * sinVehicleYaw);
-        float relativeGoalY = (-(goalX - vehicleX) * sinVehicleYaw + (goalY - vehicleY) * cosVehicleYaw);
+        float relativeGoalX, relativeGoalY;
+        if(startWaypoints && goalX != 999.99 && goalY != 999.99){
+          relativeGoalX = ((goalX - vehicleX) * cosVehicleYaw + (goalY - vehicleY) * sinVehicleYaw);
+          relativeGoalY = (-(goalX - vehicleX) * sinVehicleYaw + (goalY - vehicleY) * cosVehicleYaw);
+        }else{
+          relativeGoalX = 0.0;
+          relativeGoalY = 0.0;
+        }
 
         relativeGoalDis = sqrt(relativeGoalX * relativeGoalX + relativeGoalY * relativeGoalY);
+        // std::cout << "relative goal dis: " << relativeGoalDis << ", goal clear: " << goalClearRange << std::endl;
+        if(relativeGoalDis < goalClearRange){
+          if(startWaypoints){
+            goalX = 999.99;
+            goalY = 999.99;
+          }
+          startWaypoints = false;
+        }
         joyDir = atan2(relativeGoalY, relativeGoalX) * 180 / PI;
 
         if (!twoWayDrive) {
@@ -983,12 +932,6 @@ int main(int argc, char** argv)
         pubFreePaths.publish(freePaths2);
 #endif
       }
-
-      /*sensor_msgs::PointCloud2 plannerCloud2;
-      pcl::toROSMsg(*plannerCloudCrop, plannerCloud2);
-      plannerCloud2.header.stamp = ros::Time().fromSec(odomTime);
-      plannerCloud2.header.frame_id = "vehicle";
-      pubLaserCloud.publish(plannerCloud2);*/
     }
 
     status = ros::ok();
