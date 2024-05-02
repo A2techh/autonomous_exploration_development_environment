@@ -145,4 +145,33 @@
   <xacro:gazebo_material ref="right_front_wheel" color="Black" />
   <xacro:gazebo_material ref="right_rear_wheel"  color="Black" />
 
+  <gazebo>
+    <plugin name="gps_controller" filename="libhector_gazebo_ros_gps.so">
+      <updateRate>4</updateRate>
+      <bodyName>base_link</bodyName>
+      <frameId>base_link</frameId>
+      <topicName>ublox/fix</topicName>
+      <velocityTopicName>ublox/velocity</velocityTopicName>
+      <referenceLatitude>$(optenv GAZEBO_WORLD_LAT 2.902719251473233)</referenceLatitude>
+      <referenceLongitude>$(optenv GAZEBO_WORLD_LON 101.28960237382006)</referenceLongitude>
+      <referenceHeading>90</referenceHeading>
+      <referenceAltitude>0</referenceAltitude>
+      <drift>0.0001 0.0001 0.0001</drift>
+    </plugin>
+  </gazebo>
+
+  <gazebo>
+    <plugin name="imu_controller" filename="libhector_gazebo_ros_imu.so">
+      <updateRate>50.0</updateRate>
+      <bodyName>base_link</bodyName>
+      <topicName>imu/data</topicName>
+      <accelDrift>0.005 0.005 0.005</accelDrift>
+      <accelGaussianNoise>0.005 0.005 0.005</accelGaussianNoise>
+      <rateDrift>0.005 0.005 0.005 </rateDrift>
+      <rateGaussianNoise>0.005 0.005 0.005 </rateGaussianNoise>
+      <headingDrift>0.005</headingDrift>
+      <headingGaussianNoise>0.005</headingGaussianNoise>
+    </plugin>
+  </gazebo>
+
 </robot>

@@ -2,7 +2,7 @@
 
 import rospy
 from geometry_msgs.msg import TwistStamped
-from std_msgs.msg import Empty
+from std_msgs.msg import Empty, Bool
 import sys
 import tty
 import termios
@@ -21,6 +21,7 @@ def getch():
 def main():
     rospy.init_node('teleop_node')
     pub_cmd_vel = rospy.Publisher('/cmd_vel', TwistStamped, queue_size=10)
+    pub_manual = rospy.Publisher('/manual', Bool, queue_size=1)
     pub_start_waypoints = rospy.Publisher('/start_waypoints', Empty, queue_size=1)
 
     print("Press 'w' to move forward, 's' to move backward, 'a' to turn left, 'd' to turn right.")
@@ -32,25 +33,31 @@ def main():
 
             cmd_vel_msg = TwistStamped()
             cmd_vel_msg.header.stamp = rospy.Time.now()
-
+            manual_msg = Bool()
             if char == 'w':
-                cmd_vel_msg.twist.linear.x = 0.5
+                manual_msg.data = True
+                cmd_vel_msg.twist.linear.x = 1.5
             elif char == 's':
-                cmd_vel_msg.twist.linear.x = -0.5
+                manual_msg.data = True
+                cmd_vel_msg.twist.linear.x = -1.5
             elif char == 'a':
-                cmd_vel_msg.twist.angular.z = 0.25
+                manual_msg.data = True
+                cmd_vel_msg.twist.angular.z = 0.5
             elif char == 'd':
-                cmd_vel_msg.twist.angular.z = -0.25
+                manual_msg.data = True
+                cmd_vel_msg.twist.angular.z = -0.5
             elif char == 'x':
+                manual_msg.data = False
                 print("stop")
             elif char == 'j':
+                manual_msg.data = False
                 start_waypoints_msg = Empty()
                 pub_start_waypoints.publish(start_waypoints_msg)
             elif char == 'q':
                 break
 
             pub_cmd_vel.publish(cmd_vel_msg)
-
+            pub_manual.publish(manual_msg)
     except rospy.ROSInterruptException:
         pass
     finally:

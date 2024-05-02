@@ -1,13 +1,14 @@
 <launch>
 
-  <arg name="world_name" default="garage"/>
+  <arg name="world_name" default="car_parking"/>
   <arg name="vehicleHeight" default="0.75"/>
   <arg name="cameraOffsetZ" default="0"/>
   <arg name="vehicleX" default="0"/>
   <arg name="vehicleY" default="0"/>
   <arg name="terrainZ" default="0"/>
-  <arg name="vehicleYaw" default="0"/>
-  <arg name="gazebo_gui" default="false"/>
+  <!-- <arg name="vehicleYaw" default="0.65"/> -->
+  <arg name="vehicleYaw" default="1.5708"/>
+  <arg name="gazebo_gui" default="true"/>
 
 
   <include file="$(find local_planner)/launch/my_local_planner.launch">
